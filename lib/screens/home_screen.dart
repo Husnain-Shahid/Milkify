@@ -4,6 +4,7 @@ import '../models/customer_model.dart';
 import 'add_customer_screen.dart';
 import 'calendar_screen.dart';
 import 'bill_screen.dart';
+import 'income_dashboard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -61,6 +62,15 @@ class _HomeScreenState extends State<HomeScreen> {
     loadCustomers();
   }
 
+  void _openBill(Customer customer) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MonthlyBillScreen(customer: customer),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -77,6 +87,23 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         icon: Icon(Icons.add),
         label: Text("Add Customer"),
+      ),
+      appBar: AppBar(
+        title: Text("Milk Customers"),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            tooltip: "Income Dashboard",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => IncomeDashboardScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -141,8 +168,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.people_outline,
-                        size: 80, color: Colors.grey),
+                    Icon(
+                      Icons.people_outline,
+                      size: 80,
+                      color: Colors.grey,
+                    ),
                     SizedBox(height: 12),
                     Text(
                       "No Customers Found",
@@ -198,61 +228,61 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("${c.milkQuantity} L | Rs ${c.pricePerLiter}"),
+                            Text(
+                              "${c.milkQuantity} L | Rs ${c.pricePerLiter}",
+                            ),
                             Text("Phone: ${c.phone}"),
                           ],
                         ),
                       ),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == "edit") {
-                            _editCustomer(c);
-                          } else if (value == "bill") {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    MonthlyBillScreen(customer: c),
-                              ),
-                            );
-                          } else if (value == "delete") {
-                            showDialog(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                title: Text("Delete Customer"),
-                                content: Text(
-                                  "Are you sure you want to delete ${c.name}?",
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context),
-                                    child: Text("Cancel"),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _deleteCustomer(c.id!);
-                                    },
-                                    child: Text("Delete"),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: "edit",
-                            child: Text("Edit Customer"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.receipt),
+                            tooltip: "Monthly Bill",
+                            onPressed: () => _openBill(c),
                           ),
-                          PopupMenuItem(
-                            value: "bill",
-                            child: Text("Monthly Bill"),
-                          ),
-                          PopupMenuItem(
-                            value: "delete",
-                            child: Text("Delete Customer"),
+                          PopupMenuButton<String>(
+                            onSelected: (value) {
+                              if (value == "edit") {
+                                _editCustomer(c);
+                              } else if (value == "delete") {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: Text("Delete Customer"),
+                                    content: Text(
+                                      "Are you sure you want to delete ${c.name}?",
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context),
+                                        child: Text("Cancel"),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _deleteCustomer(c.id!);
+                                        },
+                                        child: Text("Delete"),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: "edit",
+                                child: Text("Edit Customer"),
+                              ),
+                              PopupMenuItem(
+                                value: "delete",
+                                child: Text("Delete Customer"),
+                              ),
+                            ],
                           ),
                         ],
                       ),

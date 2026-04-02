@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../database/db_helper.dart';
+import '../models/bill_model.dart';
 import '../models/customer_model.dart';
 import '../models/milk_record_model.dart';
 
@@ -22,6 +23,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
   DBHelper dbHelper = DBHelper();
   List<MilkRecord> records = [];
   late DateTime selectedMonth;
+  BillRecord? billRecord;
 
   @override
   void initState() {
@@ -31,7 +33,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     _loadMonthlyRecords();
   }
 
-  void _loadMonthlyRecords() async {
+  Future<void> _loadMonthlyRecords() async {
     List<MilkRecord> allRecords = await dbHelper.getRecords(widget.customer.id!);
 
     List<MilkRecord> monthRecords = allRecords.where((r) {
@@ -49,8 +51,33 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
 
     monthRecords.sort((a, b) => a.date.compareTo(b.date));
 
+    final computedTotal = monthRecords.fold(0.0, (sum, r) {
+      if (r.status != 'skipped') {
+        return sum + (r.milkQuantity + r.extraMilk) * widget.customer.pricePerLiter;
+      }
+      return sum;
+    });
+
+    final billMonth = DateFormat('yyyy-MM').format(selectedMonth);
+    final existingBill = await dbHelper.getBillByMonth(widget.customer.id!, billMonth);
+
+    final newBill = BillRecord(
+      id: existingBill?.id,
+      customerId: widget.customer.id!,
+      billMonth: billMonth,
+      totalAmount: computedTotal,
+      dueAmount: existingBill?.isPaid == true ? 0.0 : computedTotal,
+      isPaid: existingBill?.isPaid ?? false,
+      paymentDate: existingBill?.paymentDate,
+      createdAt: existingBill?.createdAt ?? DateTime.now().toIso8601String(),
+    );
+
+    await dbHelper.upsertBill(newBill);
+
+    if (!mounted) return;
     setState(() {
       records = monthRecords;
+      billRecord = newBill;
     });
   }
 
@@ -60,14 +87,30 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
   double get totalCost => records.fold(0.0, (sum, r) {
     if (r.status != 'skipped') {
       return sum + (r.milkQuantity + r.extraMilk) * widget.customer.pricePerLiter;
-    } else {
-      return sum;
     }
+    return sum;
   });
+
+  Future<void> _markPaid() async {
+    if (billRecord?.id == null) return;
+    await dbHelper.markBillPaid(
+      billRecord!.id!,
+      paymentDate: DateTime.now().toIso8601String(),
+    );
+    _loadMonthlyRecords();
+  }
+
+  Future<void> _markUnpaid() async {
+    if (billRecord?.id == null) return;
+    await dbHelper.markBillUnpaid(billRecord!.id!);
+    _loadMonthlyRecords();
+  }
 
   @override
   Widget build(BuildContext context) {
     String monthName = DateFormat('MMMM yyyy').format(selectedMonth);
+    final isPaid = billRecord?.isPaid ?? false;
+    final dueAmount = billRecord?.dueAmount ?? totalCost;
 
     return Scaffold(
       appBar: AppBar(title: Text("Monthly Bill - ${widget.customer.name}")),
@@ -80,6 +123,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 16),
+
             Card(
               child: ListTile(
                 title: Text("Normal Milk Days"),
@@ -108,7 +152,30 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                 trailing: Text("Rs ${totalCost.toStringAsFixed(2)}"),
               ),
             ),
+
+            Card(
+              color: isPaid ? Colors.green[50] : Colors.orange[50],
+              child: ListTile(
+                title: Text(
+                  "Payment Status",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  isPaid
+                      ? "Paid on ${billRecord?.paymentDate != null
+                      ? DateFormat('dd MMM yyyy').format(DateTime.parse(billRecord!.paymentDate!))
+                      : 'N/A'}"
+                      : "Unpaid",
+                ),
+                trailing: Text(
+                  "Due: Rs ${dueAmount.toStringAsFixed(2)}",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+
             SizedBox(height: 10),
+
             Row(
               children: [
                 Expanded(
@@ -126,7 +193,33 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                 ),
               ],
             ),
+
             SizedBox(height: 10),
+
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: isPaid ? null : _markPaid,
+                    child: Text("Mark Paid"),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: isPaid ? _markUnpaid : null,
+                    child: Text("Mark Unpaid"),
+                  ),
+                ),
+              ],
+            ),
+
+            SizedBox(height: 10),
+
             Expanded(
               child: ListView.builder(
                 itemCount: records.length,
@@ -197,6 +290,12 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
               pw.Text("Extra Milk: ${extraMilk.toStringAsFixed(2)} L"),
               pw.Text("Skipped Days: $skippedDays"),
               pw.Text("Total Cost: Rs ${totalCost.toStringAsFixed(2)}"),
+              pw.Text(
+                "Payment Status: ${billRecord?.isPaid == true ? 'PAID' : 'UNPAID'}",
+              ),
+              pw.Text(
+                "Due Amount: Rs ${(billRecord?.dueAmount ?? totalCost).toStringAsFixed(2)}",
+              ),
               pw.SizedBox(height: 20),
               pw.Text(
                 "Daily Breakdown:",

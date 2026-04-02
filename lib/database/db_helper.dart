@@ -1,7 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+
 import '../models/customer_model.dart';
 import '../models/milk_record_model.dart';
+import '../models/bill_model.dart';
 
 class DBHelper {
   static Database? _database;
@@ -17,7 +19,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE customers(
@@ -41,6 +43,37 @@ class DBHelper {
             status TEXT
           )
         ''');
+
+        await db.execute('''
+          CREATE TABLE bills(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customerId INTEGER,
+            billMonth TEXT,
+            totalAmount REAL,
+            dueAmount REAL,
+            isPaid INTEGER,
+            paymentDate TEXT,
+            createdAt TEXT,
+            UNIQUE(customerId, billMonth)
+          )
+        ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE bills(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              customerId INTEGER,
+              billMonth TEXT,
+              totalAmount REAL,
+              dueAmount REAL,
+              isPaid INTEGER,
+              paymentDate TEXT,
+              createdAt TEXT,
+              UNIQUE(customerId, billMonth)
+            )
+          ''');
+        }
       },
     );
   }
@@ -76,7 +109,6 @@ class DBHelper {
   }
 
   /// Insert or replace a milk record
-  /// Used for auto normal milk or editing existing record
   Future<int> insertMilkRecord(MilkRecord record) async {
     final db = await database;
     return await db.insert(
@@ -121,7 +153,7 @@ class DBHelper {
     return null;
   }
 
-  /// Ensure today's normal milk is present, used for auto daily insertion
+  /// Ensure today's normal milk is present
   Future<void> ensureTodayMilk(int customerId, double milkQuantity) async {
     String today = DateTime.now().toIso8601String().split('T')[0];
     MilkRecord? todayRecord = await getRecordByDate(customerId, today);
@@ -136,4 +168,138 @@ class DBHelper {
       await insertMilkRecord(record);
     }
   }
+
+  // --------------------------------------------------
+  // BILL / PAYMENT TRACKING
+  // --------------------------------------------------
+
+  /// Get bill by customer + month
+  Future<BillRecord?> getBillByMonth(int customerId, String billMonth) async {
+    final db = await database;
+    final maps = await db.query(
+      'bills',
+      where: 'customerId = ? AND billMonth = ?',
+      whereArgs: [customerId, billMonth],
+    );
+
+    if (maps.isNotEmpty) {
+      return BillRecord.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  /// Get bill by id
+  Future<BillRecord?> getBillById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'bills',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isNotEmpty) {
+      return BillRecord.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  /// Insert or update a bill
+  Future<int> upsertBill(BillRecord bill) async {
+    final db = await database;
+    final existing = await getBillByMonth(bill.customerId, bill.billMonth);
+
+    if (existing == null) {
+      final id = await db.insert('bills', bill.toMap());
+      bill.id = id;
+      return id;
+    } else {
+      bill.id = existing.id;
+      return await db.update(
+        'bills',
+        bill.toMap(),
+        where: 'id = ?',
+        whereArgs: [existing.id],
+      );
+    }
+  }
+
+  /// Mark bill as paid
+  Future<int> markBillPaid(int billId, {String? paymentDate}) async {
+    final db = await database;
+    return await db.update(
+      'bills',
+      {
+        'isPaid': 1,
+        'dueAmount': 0.0,
+        'paymentDate': paymentDate ?? DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [billId],
+    );
+  }
+
+  /// Mark bill as unpaid
+  Future<int> markBillUnpaid(int billId) async {
+    final db = await database;
+    final bill = await getBillById(billId);
+
+    if (bill == null) return 0;
+
+    return await db.update(
+      'bills',
+      {
+        'isPaid': 0,
+        'dueAmount': bill.totalAmount,
+        'paymentDate': null,
+      },
+      where: 'id = ?',
+      whereArgs: [billId],
+    );
+  }
+
+  /// Get all bills for a customer
+  Future<List<BillRecord>> getBillsForCustomer(int customerId) async {
+    final db = await database;
+    final maps = await db.query(
+      'bills',
+      where: 'customerId = ?',
+      whereArgs: [customerId],
+      orderBy: 'billMonth DESC',
+    );
+    return List.generate(maps.length, (i) => BillRecord.fromMap(maps[i]));
+  }
+  /// Get all bills for a month
+  Future<List<BillRecord>> getBillsByMonth(String billMonth) async {
+    final db = await database;
+    final maps = await db.query(
+      'bills',
+      where: 'billMonth = ?',
+      whereArgs: [billMonth],
+      orderBy: 'id ASC',
+    );
+    return List.generate(maps.length, (i) => BillRecord.fromMap(maps[i]));
+  }
+
+  /// Add a payment to a bill (supports installment-style payments)
+  Future<int> addBillPayment(int billId, double amount) async {
+    final db = await database;
+    final bill = await getBillById(billId);
+
+    if (bill == null) return 0;
+
+    double newDue = bill.dueAmount - amount;
+    if (newDue < 0) newDue = 0;
+
+    return await db.update(
+      'bills',
+      {
+        'dueAmount': newDue,
+        'isPaid': newDue == 0 ? 1 : 0,
+        'paymentDate': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [billId],
+    );
+  }
+
 }
