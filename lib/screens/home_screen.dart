@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../database/db_helper.dart';
 import '../models/customer_model.dart';
 import 'add_customer_screen.dart';
+import 'calendar_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -35,6 +36,14 @@ class _HomeScreenState extends State<HomeScreen> {
           return ListTile(
             title: Text(c.name),
             subtitle: Text("${c.milkQuantity} L | Rs ${c.pricePerLiter}"),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CalendarScreen(customerId: c.id!),
+                ),
+              );
+            },
           );
         },
       ),
