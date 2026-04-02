@@ -45,54 +45,60 @@ class DBHelper {
     );
   }
 
-  // Insert Customer
+  /// Insert a new customer
   Future<int> insertCustomer(Customer customer) async {
     final db = await database;
     return await db.insert('customers', customer.toMap());
   }
 
-  // Get All Customers
+  /// Get all customers
   Future<List<Customer>> getCustomers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('customers');
-
-    return List.generate(maps.length, (i) {
-      return Customer.fromMap(maps[i]);
-    });
+    return List.generate(maps.length, (i) => Customer.fromMap(maps[i]));
   }
 
-  // Delete Customer
+  /// Delete a customer
   Future<int> deleteCustomer(int id) async {
     final db = await database;
     return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Insert Milk Record
+  /// Insert or replace a milk record
+  /// Used for auto normal milk or editing existing record
   Future<int> insertMilkRecord(MilkRecord record) async {
     final db = await database;
     return await db.insert(
       'milk_records',
       record.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.replace, // Replace if same id exists
     );
   }
 
-  // Get Records for a Customer
+  /// Update an existing milk record
+  Future<int> updateMilkRecord(MilkRecord record) async {
+    final db = await database;
+    return await db.update(
+      'milk_records',
+      record.toMap(),
+      where: 'id = ?',
+      whereArgs: [record.id],
+    );
+  }
+
+  /// Get all milk records of a customer
   Future<List<MilkRecord>> getRecords(int customerId) async {
     final db = await database;
-
     final maps = await db.query(
       'milk_records',
       where: 'customerId = ?',
       whereArgs: [customerId],
+      orderBy: 'date ASC', // keep chronological order
     );
-
-    return List.generate(maps.length, (i) {
-      return MilkRecord.fromMap(maps[i]);
-    });
+    return List.generate(maps.length, (i) => MilkRecord.fromMap(maps[i]));
   }
 
-  // Get record by date
+  /// Get milk record by specific date
   Future<MilkRecord?> getRecordByDate(int customerId, String date) async {
     final db = await database;
     final maps = await db.query(
@@ -102,5 +108,22 @@ class DBHelper {
     );
     if (maps.isNotEmpty) return MilkRecord.fromMap(maps.first);
     return null;
+  }
+
+  /// Ensure today's normal milk is present, used for auto daily insertion
+  Future<void> ensureTodayMilk(int customerId, double milkQuantity) async {
+    String today = DateTime.now().toIso8601String().split('T')[0];
+    MilkRecord? todayRecord = await getRecordByDate(customerId, today);
+    if (todayRecord == null) {
+      // Insert normal milk record automatically
+      MilkRecord record = MilkRecord(
+        customerId: customerId,
+        date: today,
+        milkQuantity: milkQuantity,
+        extraMilk: 0,
+        status: 'taken',
+      );
+      await insertMilkRecord(record);
+    }
   }
 }
