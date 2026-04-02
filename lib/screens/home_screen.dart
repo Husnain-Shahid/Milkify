@@ -12,6 +12,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Customer> customers = [];
+  List<Customer> filteredCustomers = [];
+  final searchController = TextEditingController();
 
   @override
   void initState() {
@@ -21,7 +23,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void loadCustomers() async {
     customers = await DBHelper().getCustomers();
+    filteredCustomers = List.from(customers);
     setState(() {});
+  }
+
+  void filterCustomers(String query) {
+    final q = query.toLowerCase();
+    setState(() {
+      filteredCustomers = customers.where((c) {
+        return c.name.toLowerCase().contains(q) ||
+            c.phone.toLowerCase().contains(q);
+      }).toList();
+    });
   }
 
   void _deleteCustomer(int id) async {
@@ -35,66 +48,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Milk Customers")),
-      body: customers.isEmpty
-          ? Center(child: Text("No Customers Found"))
-          : ListView.builder(
-        itemCount: customers.length,
-        itemBuilder: (context, index) {
-          var c = customers[index];
-          return ListTile(
-            leading: Icon(Icons.person,size: 50),
-            title: Text(c.name,style: TextStyle(fontWeight: FontWeight.bold),),
-            subtitle: Text("${c.milkQuantity} L | Rs ${c.pricePerLiter}"),
-            onTap: () {
-              // Open CalendarScreen
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CalendarScreen(customer: c),
-                ),
-              );
-            },
-            trailing: IconButton(
-              icon: Icon(Icons.receipt),
-              tooltip: "Monthly Bill",
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => MonthlyBillScreen(customer: c),
-                  ),
-                );
-              },
-            ),
-            onLongPress: () {
-              // Confirm deletion
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: Text("Delete Customer"),
-                  content: Text("Are you sure you want to delete ${c.name}?"),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text("Cancel"),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _deleteCustomer(c.id!);
-                      },
-                      child: Text("Delete"),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.add),
+      backgroundColor: Colors.grey[100],
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.push(
             context,
@@ -102,8 +57,196 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context) => AddCustomerScreen(),
             ),
           );
-          loadCustomers(); // refresh after adding
+          loadCustomers();
         },
+        icon: Icon(Icons.add),
+        label: Text("Add Customer"),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade700, Colors.blue.shade400],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Milk Customers",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "${customers.length} total customers",
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: TextField(
+                      controller: searchController,
+                      onChanged: filterCustomers,
+                      decoration: InputDecoration(
+                        hintText: "Search customer...",
+                        prefixIcon: Icon(Icons.search),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            Expanded(
+              child: filteredCustomers.isEmpty
+                  ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.people_outline,
+                        size: 80, color: Colors.grey),
+                    SizedBox(height: 12),
+                    Text(
+                      "No Customers Found",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      "Tap + to add your first customer",
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              )
+                  : ListView.builder(
+                padding: EdgeInsets.all(16),
+                itemCount: filteredCustomers.length,
+                itemBuilder: (context, index) {
+                  var c = filteredCustomers[index];
+                  return Card(
+                    elevation: 4,
+                    margin: EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.all(16),
+                      leading: CircleAvatar(
+                        radius: 26,
+                        backgroundColor: Colors.blue.shade100,
+                        child: Text(
+                          c.name.isNotEmpty ? c.name[0].toUpperCase() : "?",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        c.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("${c.milkQuantity} L | Rs ${c.pricePerLiter}"),
+                            Text("Phone: ${c.phone}"),
+                          ],
+                        ),
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == "bill") {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    MonthlyBillScreen(customer: c),
+                              ),
+                            );
+                          } else if (value == "delete") {
+                            showDialog(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: Text("Delete Customer"),
+                                content: Text(
+                                    "Are you sure you want to delete ${c.name}?"),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context),
+                                    child: Text("Cancel"),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      _deleteCustomer(c.id!);
+                                    },
+                                    child: Text("Delete"),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: "bill",
+                            child: Text("Monthly Bill"),
+                          ),
+                          PopupMenuItem(
+                            value: "delete",
+                            child: Text("Delete Customer"),
+                          ),
+                        ],
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                CalendarScreen(customer: c),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
