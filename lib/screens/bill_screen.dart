@@ -123,7 +123,6 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 16),
-
             Card(
               child: ListTile(
                 title: Text("Normal Milk Days"),
@@ -152,7 +151,6 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                 trailing: Text("Rs ${totalCost.toStringAsFixed(2)}"),
               ),
             ),
-
             Card(
               color: isPaid ? Colors.green[50] : Colors.orange[50],
               child: ListTile(
@@ -173,9 +171,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                 ),
               ),
             ),
-
             SizedBox(height: 10),
-
             Row(
               children: [
                 Expanded(
@@ -193,9 +189,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                 ),
               ],
             ),
-
             SizedBox(height: 10),
-
             Row(
               children: [
                 Expanded(
@@ -217,9 +211,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                 ),
               ],
             ),
-
             SizedBox(height: 10),
-
             Expanded(
               child: ListView.builder(
                 itemCount: records.length,
@@ -263,67 +255,69 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     }
   }
 
+  String _safeFileName(String input) {
+    return input
+        .replaceAll(RegExp(r'[^\w\s-]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_');
+  }
+
   Future<File> _buildPdfFile() async {
     final pdf = pw.Document();
     final monthName = DateFormat('MMMM yyyy').format(selectedMonth);
 
     pdf.addPage(
-      pw.Page(
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                "Milk Monthly Bill",
-                style: pw.TextStyle(
-                  fontSize: 24,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text("Customer: ${widget.customer.name}"),
-              pw.Text("Phone: ${widget.customer.phone}"),
-              pw.Text("Address: ${widget.customer.address}"),
-              pw.Text("Month: $monthName"),
-              pw.SizedBox(height: 10),
-              pw.Text("Normal Milk Days: $normalMilkDays"),
-              pw.Text("Extra Milk: ${extraMilk.toStringAsFixed(2)} L"),
-              pw.Text("Skipped Days: $skippedDays"),
-              pw.Text("Total Cost: Rs ${totalCost.toStringAsFixed(2)}"),
-              pw.Text(
-                "Payment Status: ${billRecord?.isPaid == true ? 'PAID' : 'UNPAID'}",
-              ),
-              pw.Text(
-                "Due Amount: Rs ${(billRecord?.dueAmount ?? totalCost).toStringAsFixed(2)}",
-              ),
-              pw.SizedBox(height: 20),
-              pw.Text(
-                "Daily Breakdown:",
-                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                headers: ["Date", "Normal Milk (L)", "Extra Milk (L)", "Status"],
-                data: records.map((r) {
-                  return [
-                    DateFormat('dd MMM yyyy').format(DateTime.parse(r.date)),
-                    r.milkQuantity.toStringAsFixed(2),
-                    r.extraMilk.toStringAsFixed(2),
-                    r.status,
-                  ];
-                }).toList(),
-              ),
-            ],
-          );
-        },
+      pw.MultiPage(
+        build: (context) => [
+          pw.Text(
+            "Milk Monthly Bill",
+            style: pw.TextStyle(
+              fontSize: 24,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text("Customer: ${widget.customer.name}"),
+          pw.Text("Phone: ${widget.customer.phone}"),
+          pw.Text("Address: ${widget.customer.address}"),
+          pw.Text("Month: $monthName"),
+          pw.SizedBox(height: 10),
+          pw.Text("Normal Milk Days: $normalMilkDays"),
+          pw.Text("Extra Milk: ${extraMilk.toStringAsFixed(2)} L"),
+          pw.Text("Skipped Days: $skippedDays"),
+          pw.Text("Total Cost: Rs ${totalCost.toStringAsFixed(2)}"),
+          pw.Text(
+            "Payment Status: ${billRecord?.isPaid == true ? 'PAID' : 'UNPAID'}",
+          ),
+          pw.Text(
+            "Due Amount: Rs ${(billRecord?.dueAmount ?? totalCost).toStringAsFixed(2)}",
+          ),
+          pw.SizedBox(height: 20),
+          pw.Text(
+            "Daily Breakdown:",
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 10),
+          pw.TableHelper.fromTextArray(
+            headers: ["Date", "Normal Milk (L)", "Extra Milk (L)", "Status"],
+            data: records.map((r) {
+              return [
+                DateFormat('dd MMM yyyy').format(DateTime.parse(r.date)),
+                r.milkQuantity.toStringAsFixed(2),
+                r.extraMilk.toStringAsFixed(2),
+                r.status,
+              ];
+            }).toList(),
+          ),
+        ],
       ),
     );
 
     final bytes = await pdf.save();
-    final dir = await getTemporaryDirectory();
+    final dir = await getApplicationDocumentsDirectory();
 
+    final safeCustomerName = _safeFileName(widget.customer.name);
     final safeMonth = monthName.replaceAll(' ', '_');
-    final file = File('${dir.path}/Milk_Bill_${widget.customer.name}_$safeMonth.pdf');
+    final file = File('${dir.path}/Milk_Bill_${safeCustomerName}_$safeMonth.pdf');
 
     await file.writeAsBytes(bytes, flush: true);
     return file;

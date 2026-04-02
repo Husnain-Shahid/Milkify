@@ -169,6 +169,52 @@ class DBHelper {
     }
   }
 
+  /// Sync missing normal milk records for all customers up to today.
+  /// If the app was closed for multiple days, this backfills the missing days.
+  Future<void> syncMissingMilkRecords() async {
+    final customers = await getCustomers();
+
+    final now = DateTime.now();
+    final todayDate = DateTime(now.year, now.month, now.day);
+
+    for (final customer in customers) {
+      if (customer.id == null) continue;
+
+      final records = await getRecords(customer.id!);
+      final existingDates = records.map((r) => r.date).toSet();
+
+      DateTime startDate;
+
+      if (records.isEmpty) {
+        // If there are no records at all, create today's record.
+        startDate = todayDate;
+      } else {
+        // Backfill from the day after the latest known record.
+        final latest = DateTime.parse(records.last.date);
+        final latestDateOnly = DateTime(latest.year, latest.month, latest.day);
+        startDate = latestDateOnly.add(const Duration(days: 1));
+      }
+
+      for (DateTime day = startDate;
+      !day.isAfter(todayDate);
+      day = day.add(const Duration(days: 1))) {
+        final key = day.toIso8601String().split('T')[0];
+
+        if (existingDates.contains(key)) continue;
+
+        await insertMilkRecord(
+          MilkRecord(
+            customerId: customer.id!,
+            date: key,
+            milkQuantity: customer.milkQuantity,
+            extraMilk: 0,
+            status: 'taken',
+          ),
+        );
+      }
+    }
+  }
+
   // --------------------------------------------------
   // BILL / PAYMENT TRACKING
   // --------------------------------------------------
@@ -268,6 +314,7 @@ class DBHelper {
     );
     return List.generate(maps.length, (i) => BillRecord.fromMap(maps[i]));
   }
+
   /// Get all bills for a month
   Future<List<BillRecord>> getBillsByMonth(String billMonth) async {
     final db = await database;
@@ -301,5 +348,4 @@ class DBHelper {
       whereArgs: [billId],
     );
   }
-
 }

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
-  runApp(MilkApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MilkApp());
 }
 
 class MilkApp extends StatelessWidget {
+  const MilkApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -14,7 +17,7 @@ class MilkApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }
