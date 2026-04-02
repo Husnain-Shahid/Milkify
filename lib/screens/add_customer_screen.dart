@@ -43,11 +43,13 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
 
             TextField(
               controller: milkController,
-              decoration: InputDecoration(labelText: "Milk Quantity (Liter)"),
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: "Milk Quantity"),
             ),
 
             TextField(
               controller: priceController,
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(labelText: "Price per Liter"),
             ),
 
@@ -73,27 +75,48 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             ElevatedButton(
               child: Text("Save Customer"),
               onPressed: () async {
-                if (nameController.text.isEmpty ||
-                    milkController.text.isEmpty ||
-                    priceController.text.isEmpty) {
+
+                String name = nameController.text.trim();
+                String milkText = milkController.text.trim();
+                String priceText = priceController.text.trim();
+
+                if (name.isEmpty || milkText.isEmpty || priceText.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Please fill all required fields")),
+                    SnackBar(content: Text("Please fill all fields")),
                   );
                   return;
                 }
 
-                Customer customer = Customer(
-                  name: nameController.text,
-                  phone: phoneController.text,
-                  address: addressController.text,
-                  milkQuantity: double.parse(milkController.text),
-                  pricePerLiter: double.parse(priceController.text),
-                  time: time,
-                );
+                double? milk = double.tryParse(milkText);
+                double? price = double.tryParse(priceText);
 
-                await DBHelper().insertCustomer(customer);
+                if (milk == null || price == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Enter valid numbers (e.g. 1.5)")),
+                  );
+                  return;
+                }
 
-                Navigator.pop(context);
+                try {
+                  Customer customer = Customer(
+                    name: name,
+                    phone: phoneController.text,
+                    address: addressController.text,
+                    milkQuantity: milk,
+                    pricePerLiter: price,
+                    time: time,
+                  );
+
+                  await DBHelper().insertCustomer(customer);
+
+                  Navigator.pop(context);
+
+                } catch (e) {
+                  print("ERROR: $e");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Error saving customer")),
+                  );
+                }
               },
             )
           ],
