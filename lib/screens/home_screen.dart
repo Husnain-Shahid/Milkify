@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => CalendarScreen(customerId: c.id!),
+                  builder: (context) => CalendarScreen(customer: c),
                 ),
               );
             },
@@ -56,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context) => AddCustomerScreen(),
             ),
           );
-
           loadCustomers(); // refresh after adding
         },
       ),

@@ -17,7 +17,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE customers(
@@ -67,13 +67,17 @@ class DBHelper {
     return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Insert Record
+  // Insert Milk Record
   Future<int> insertMilkRecord(MilkRecord record) async {
     final db = await database;
-    return await db.insert('milk_records', record.toMap());
+    return await db.insert(
+      'milk_records',
+      record.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
-// Get Records for a Customer
+  // Get Records for a Customer
   Future<List<MilkRecord>> getRecords(int customerId) async {
     final db = await database;
 
@@ -86,5 +90,17 @@ class DBHelper {
     return List.generate(maps.length, (i) {
       return MilkRecord.fromMap(maps[i]);
     });
+  }
+
+  // Get record by date
+  Future<MilkRecord?> getRecordByDate(int customerId, String date) async {
+    final db = await database;
+    final maps = await db.query(
+      'milk_records',
+      where: 'customerId = ? AND date = ?',
+      whereArgs: [customerId, date],
+    );
+    if (maps.isNotEmpty) return MilkRecord.fromMap(maps.first);
+    return null;
   }
 }
