@@ -51,6 +51,17 @@ class DBHelper {
     return await db.insert('customers', customer.toMap());
   }
 
+  /// Update an existing customer
+  Future<int> updateCustomer(Customer customer) async {
+    final db = await database;
+    return await db.update(
+      'customers',
+      customer.toMap(),
+      where: 'id = ?',
+      whereArgs: [customer.id],
+    );
+  }
+
   /// Get all customers
   Future<List<Customer>> getCustomers() async {
     final db = await database;
@@ -71,7 +82,7 @@ class DBHelper {
     return await db.insert(
       'milk_records',
       record.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // Replace if same id exists
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
@@ -93,7 +104,7 @@ class DBHelper {
       'milk_records',
       where: 'customerId = ?',
       whereArgs: [customerId],
-      orderBy: 'date ASC', // keep chronological order
+      orderBy: 'date ASC',
     );
     return List.generate(maps.length, (i) => MilkRecord.fromMap(maps[i]));
   }
@@ -115,7 +126,6 @@ class DBHelper {
     String today = DateTime.now().toIso8601String().split('T')[0];
     MilkRecord? todayRecord = await getRecordByDate(customerId, today);
     if (todayRecord == null) {
-      // Insert normal milk record automatically
       MilkRecord record = MilkRecord(
         customerId: customerId,
         date: today,

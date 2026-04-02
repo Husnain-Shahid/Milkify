@@ -21,6 +21,12 @@ class _HomeScreenState extends State<HomeScreen> {
     loadCustomers();
   }
 
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
   void loadCustomers() async {
     customers = await DBHelper().getCustomers();
     filteredCustomers = List.from(customers);
@@ -41,6 +47,16 @@ class _HomeScreenState extends State<HomeScreen> {
     await DBHelper().deleteCustomer(id);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("Customer deleted")),
+    );
+    loadCustomers();
+  }
+
+  void _editCustomer(Customer customer) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddCustomerScreen(customer: customer),
+      ),
     );
     loadCustomers();
   }
@@ -160,7 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         radius: 26,
                         backgroundColor: Colors.blue.shade100,
                         child: Text(
-                          c.name.isNotEmpty ? c.name[0].toUpperCase() : "?",
+                          c.name.isNotEmpty
+                              ? c.name[0].toUpperCase()
+                              : "?",
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -187,7 +205,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       trailing: PopupMenuButton<String>(
                         onSelected: (value) {
-                          if (value == "bill") {
+                          if (value == "edit") {
+                            _editCustomer(c);
+                          } else if (value == "bill") {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -201,7 +221,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               builder: (_) => AlertDialog(
                                 title: Text("Delete Customer"),
                                 content: Text(
-                                    "Are you sure you want to delete ${c.name}?"),
+                                  "Are you sure you want to delete ${c.name}?",
+                                ),
                                 actions: [
                                   TextButton(
                                     onPressed: () =>
@@ -221,6 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           }
                         },
                         itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: "edit",
+                            child: Text("Edit Customer"),
+                          ),
                           PopupMenuItem(
                             value: "bill",
                             child: Text("Monthly Bill"),
