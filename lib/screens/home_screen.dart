@@ -16,6 +16,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Customer> filteredCustomers = [];
   final searchController = TextEditingController();
 
+  String selectedTimeFilter = "All";
+
   @override
   void initState() {
     super.initState();
@@ -30,18 +32,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void loadCustomers() async {
     customers = await DBHelper().getCustomers();
-    filteredCustomers = List.from(customers);
-    setState(() {});
+    _applyFilters();
+  }
+
+  void _applyFilters() {
+    final q = searchController.text.toLowerCase().trim();
+
+    setState(() {
+      filteredCustomers = customers.where((c) {
+        final matchesSearch = c.name.toLowerCase().contains(q) ||
+            c.phone.toLowerCase().contains(q) ||
+            c.time.toLowerCase().contains(q);
+
+        final matchesTime = selectedTimeFilter == "All" ||
+            c.time.toLowerCase() == selectedTimeFilter.toLowerCase();
+
+        return matchesSearch && matchesTime;
+      }).toList();
+    });
   }
 
   void filterCustomers(String query) {
-    final q = query.toLowerCase();
+    _applyFilters();
+  }
+
+  void _setTimeFilter(String filter) {
     setState(() {
-      filteredCustomers = customers.where((c) {
-        return c.name.toLowerCase().contains(q) ||
-            c.phone.toLowerCase().contains(q);
-      }).toList();
+      selectedTimeFilter = filter;
     });
+    _applyFilters();
   }
 
   void _deleteCustomer(int id) async {
@@ -67,6 +86,25 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => MonthlyBillScreen(customer: customer),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label) {
+    final isSelected = selectedTimeFilter == label;
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => _setTimeFilter(label),
+      selectedColor: Colors.blue.shade700,
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.white : Colors.black87,
+        fontWeight: FontWeight.w600,
+      ),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
       ),
     );
   }
@@ -148,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       controller: searchController,
                       onChanged: filterCustomers,
                       decoration: InputDecoration(
-                        hintText: "Search customer...",
+                        hintText: "Search name, phone, or time...",
                         prefixIcon: Icon(Icons.search),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(
@@ -156,6 +194,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           vertical: 14,
                         ),
                       ),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip("All"),
+                        SizedBox(width: 8),
+                        _buildFilterChip("Morning"),
+                        SizedBox(width: 8),
+                        _buildFilterChip("Evening"),
+                        SizedBox(width: 8),
+                        _buildFilterChip("Both"),
+                      ],
                     ),
                   ),
                 ],
@@ -183,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      "Tap + to add your first customer",
+                      "Try a different search or filter",
                       style: TextStyle(color: Colors.grey[600]),
                     ),
                   ],
@@ -206,9 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         radius: 26,
                         backgroundColor: Colors.blue.shade100,
                         child: Text(
-                          c.name.isNotEmpty
-                              ? c.name[0].toUpperCase()
-                              : "?",
+                          c.name.isNotEmpty ? c.name[0].toUpperCase() : "?",
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -228,10 +279,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              "${c.milkQuantity} L | Rs ${c.pricePerLiter}",
-                            ),
+                            Text("${c.milkQuantity} L | Rs ${c.pricePerLiter}"),
                             Text("Phone: ${c.phone}"),
+                            Text("Time: ${c.time}"),
                           ],
                         ),
                       ),
