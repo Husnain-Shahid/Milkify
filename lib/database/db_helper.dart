@@ -19,7 +19,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE customers(
@@ -29,7 +29,8 @@ class DBHelper {
             address TEXT,
             milkQuantity REAL,
             pricePerLiter REAL,
-            time TEXT
+            time TEXT,
+            createdAt TEXT
           )
         ''');
 
@@ -39,6 +40,7 @@ class DBHelper {
             customerId INTEGER,
             date TEXT,
             milkQuantity REAL,
+            actualMilkQuantity REAL,
             extraMilk REAL,
             status TEXT
           )
@@ -61,7 +63,7 @@ class DBHelper {
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 3) {
           await db.execute('''
-            CREATE TABLE bills(
+            CREATE TABLE IF NOT EXISTS bills(
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               customerId INTEGER,
               billMonth TEXT,
@@ -72,6 +74,32 @@ class DBHelper {
               createdAt TEXT,
               UNIQUE(customerId, billMonth)
             )
+          ''');
+        }
+
+        if (oldVersion < 4) {
+          try {
+            await db.execute(
+              'ALTER TABLE milk_records ADD COLUMN actualMilkQuantity REAL',
+            );
+          } catch (_) {
+            // Column may already exist.
+          }
+        }
+
+        if (oldVersion < 5) {
+          try {
+            await db.execute(
+              'ALTER TABLE customers ADD COLUMN createdAt TEXT',
+            );
+          } catch (_) {
+            // Column may already exist.
+          }
+
+          // Fill missing timestamps for older rows so sync can work.
+          await db.execute('''
+            UPDATE customers
+            SET createdAt = COALESCE(createdAt, strftime('%Y-%m-%dT%H:%M:%f', 'now'))
           ''');
         }
       },
@@ -155,13 +183,14 @@ class DBHelper {
 
   /// Ensure today's normal milk is present
   Future<void> ensureTodayMilk(int customerId, double milkQuantity) async {
-    String today = DateTime.now().toIso8601String().split('T')[0];
-    MilkRecord? todayRecord = await getRecordByDate(customerId, today);
+    final String today = DateTime.now().toIso8601String().split('T')[0];
+    final MilkRecord? todayRecord = await getRecordByDate(customerId, today);
     if (todayRecord == null) {
-      MilkRecord record = MilkRecord(
+      final MilkRecord record = MilkRecord(
         customerId: customerId,
         date: today,
         milkQuantity: milkQuantity,
+        actualMilkQuantity: milkQuantity,
         extraMilk: 0,
         status: 'taken',
       );
@@ -185,14 +214,13 @@ class DBHelper {
 
       DateTime startDate;
 
-      if (records.isEmpty) {
-        // If there are no records at all, create today's record.
-        startDate = todayDate;
-      } else {
-        // Backfill from the day after the latest known record.
+      if (records.isNotEmpty) {
         final latest = DateTime.parse(records.last.date);
         final latestDateOnly = DateTime(latest.year, latest.month, latest.day);
         startDate = latestDateOnly.add(const Duration(days: 1));
+      } else {
+        final created = DateTime.tryParse(customer.createdAt) ?? todayDate;
+        startDate = DateTime(created.year, created.month, created.day);
       }
 
       for (DateTime day = startDate;
@@ -207,6 +235,7 @@ class DBHelper {
             customerId: customer.id!,
             date: key,
             milkQuantity: customer.milkQuantity,
+            actualMilkQuantity: customer.milkQuantity,
             extraMilk: 0,
             status: 'taken',
           ),
@@ -219,7 +248,6 @@ class DBHelper {
   // BILL / PAYMENT TRACKING
   // --------------------------------------------------
 
-  /// Get bill by customer + month
   Future<BillRecord?> getBillByMonth(int customerId, String billMonth) async {
     final db = await database;
     final maps = await db.query(
@@ -234,7 +262,6 @@ class DBHelper {
     return null;
   }
 
-  /// Get bill by id
   Future<BillRecord?> getBillById(int id) async {
     final db = await database;
     final maps = await db.query(
@@ -249,7 +276,6 @@ class DBHelper {
     return null;
   }
 
-  /// Insert or update a bill
   Future<int> upsertBill(BillRecord bill) async {
     final db = await database;
     final existing = await getBillByMonth(bill.customerId, bill.billMonth);
@@ -269,7 +295,6 @@ class DBHelper {
     }
   }
 
-  /// Mark bill as paid
   Future<int> markBillPaid(int billId, {String? paymentDate}) async {
     final db = await database;
     return await db.update(
@@ -284,7 +309,6 @@ class DBHelper {
     );
   }
 
-  /// Mark bill as unpaid
   Future<int> markBillUnpaid(int billId) async {
     final db = await database;
     final bill = await getBillById(billId);
@@ -303,7 +327,6 @@ class DBHelper {
     );
   }
 
-  /// Get all bills for a customer
   Future<List<BillRecord>> getBillsForCustomer(int customerId) async {
     final db = await database;
     final maps = await db.query(
@@ -315,7 +338,6 @@ class DBHelper {
     return List.generate(maps.length, (i) => BillRecord.fromMap(maps[i]));
   }
 
-  /// Get all bills for a month
   Future<List<BillRecord>> getBillsByMonth(String billMonth) async {
     final db = await database;
     final maps = await db.query(
@@ -327,7 +349,6 @@ class DBHelper {
     return List.generate(maps.length, (i) => BillRecord.fromMap(maps[i]));
   }
 
-  /// Add a payment to a bill (supports installment-style payments)
   Future<int> addBillPayment(int billId, double amount) async {
     final db = await database;
     final bill = await getBillById(billId);

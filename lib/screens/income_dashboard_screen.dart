@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import '../database/db_helper.dart';
 import '../models/bill_model.dart';
 import '../models/customer_model.dart';
-import '../models/milk_record_model.dart';
 
 class IncomeDashboardScreen extends StatefulWidget {
   IncomeDashboardScreen({Key? key}) : super(key: key);
@@ -16,7 +15,8 @@ class IncomeDashboardScreen extends StatefulWidget {
 class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
   final DBHelper dbHelper = DBHelper();
 
-  DateTime selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, -1);
+  DateTime selectedMonth =
+  DateTime(DateTime.now().year, DateTime.now().month, -1);
   bool isLoading = true;
 
   List<BillRecord> bills = [];
@@ -43,7 +43,6 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
           if (c.id != null) c.id!: c,
       };
 
-      // Create / refresh bills for all customers for the selected month
       for (final customer in customers) {
         if (customer.id == null) continue;
 
@@ -53,17 +52,10 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
           return d.year == selectedMonth.year && d.month == selectedMonth.month;
         }).toList();
 
-        for (var r in monthRecords) {
-          if (r.status != 'skipped') {
-            r.milkQuantity = customer.milkQuantity;
-          } else {
-            r.milkQuantity = 0;
-          }
-        }
-
         final totalAmount = monthRecords.fold(0.0, (sum, r) {
           if (r.status != 'skipped') {
-            return sum + (r.milkQuantity + r.extraMilk) * customer.pricePerLiter;
+            return sum +
+                (r.effectiveMilkQuantity + r.extraMilk) * customer.pricePerLiter;
           }
           return sum;
         });
@@ -97,7 +89,6 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
 
       bills = await dbHelper.getBillsByMonth(monthKey);
 
-      // Unpaid first, then by customer name
       bills.sort((a, b) {
         final aPaid = a.isPaid ? 1 : 0;
         final bPaid = b.isPaid ? 1 : 0;
@@ -132,7 +123,6 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
   double get totalDue => bills.fold(0.0, (sum, b) => sum + b.dueAmount);
 
   int get paidBillsCount => bills.where((b) => b.isPaid).length;
-
   int get unpaidBillsCount => bills.where((b) => !b.isPaid).length;
 
   double get collectionPercent {
@@ -372,7 +362,6 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
                 ),
               ),
               SizedBox(height: 12),
-
               GridView.count(
                 shrinkWrap: true,
                 physics: NeverScrollableScrollPhysics(),
@@ -419,9 +408,7 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
                   ),
                 ],
               ),
-
               SizedBox(height: 16),
-
               Text(
                 "Customer Bills",
                 style: TextStyle(
@@ -430,7 +417,6 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
                 ),
               ),
               SizedBox(height: 12),
-
               if (bills.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 20),

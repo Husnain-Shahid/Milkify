@@ -6,6 +6,7 @@ class Customer {
   double milkQuantity;
   double pricePerLiter;
   String time;
+  String createdAt;
 
   Customer({
     this.id,
@@ -15,6 +16,7 @@ class Customer {
     required this.milkQuantity,
     required this.pricePerLiter,
     required this.time,
+    required this.createdAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -26,6 +28,7 @@ class Customer {
       'milkQuantity': milkQuantity,
       'pricePerLiter': pricePerLiter,
       'time': time,
+      'createdAt': createdAt,
     };
   }
 
@@ -35,9 +38,10 @@ class Customer {
       name: map['name'],
       phone: map['phone'],
       address: map['address'],
-      milkQuantity: map['milkQuantity'],
-      pricePerLiter: map['pricePerLiter'],
+      milkQuantity: (map['milkQuantity'] as num).toDouble(),
+      pricePerLiter: (map['pricePerLiter'] as num).toDouble(),
       time: map['time'],
+      createdAt: map['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
     );
   }
 }

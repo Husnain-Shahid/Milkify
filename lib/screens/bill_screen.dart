@@ -20,7 +20,7 @@ class MonthlyBillScreen extends StatefulWidget {
 }
 
 class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
-  DBHelper dbHelper = DBHelper();
+  final DBHelper dbHelper = DBHelper();
   List<MilkRecord> records = [];
   late DateTime selectedMonth;
   BillRecord? billRecord;
@@ -28,32 +28,38 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
   @override
   void initState() {
     super.initState();
-    DateTime now = DateTime.now();
+    final now = DateTime.now();
     selectedMonth = DateTime(now.year, now.month - 1, 1);
     _loadMonthlyRecords();
   }
 
-  Future<void> _loadMonthlyRecords() async {
-    List<MilkRecord> allRecords = await dbHelper.getRecords(widget.customer.id!);
+  String _recordLabel(MilkRecord r) {
+    if (r.status == 'skipped') return 'Skipped';
 
-    List<MilkRecord> monthRecords = allRecords.where((r) {
-      DateTime d = DateTime.parse(r.date);
+    final actual = r.effectiveMilkQuantity;
+    final normal = r.milkQuantity;
+
+    if (actual < normal) {
+      return 'Less: ${actual.toStringAsFixed(2)} L';
+    }
+
+    return 'Normal: ${actual.toStringAsFixed(2)} L';
+  }
+
+  Future<void> _loadMonthlyRecords() async {
+    final allRecords = await dbHelper.getRecords(widget.customer.id!);
+
+    final monthRecords = allRecords.where((r) {
+      final d = DateTime.parse(r.date);
       return d.year == selectedMonth.year && d.month == selectedMonth.month;
     }).toList();
-
-    for (var r in monthRecords) {
-      if (r.status != 'skipped') {
-        r.milkQuantity = widget.customer.milkQuantity;
-      } else {
-        r.milkQuantity = 0;
-      }
-    }
 
     monthRecords.sort((a, b) => a.date.compareTo(b.date));
 
     final computedTotal = monthRecords.fold(0.0, (sum, r) {
       if (r.status != 'skipped') {
-        return sum + (r.milkQuantity + r.extraMilk) * widget.customer.pricePerLiter;
+        return sum +
+            (r.effectiveMilkQuantity + r.extraMilk) * widget.customer.pricePerLiter;
       }
       return sum;
     });
@@ -84,9 +90,11 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
   int get skippedDays => records.where((r) => r.status == 'skipped').length;
   double get extraMilk => records.fold(0.0, (sum, r) => sum + r.extraMilk);
   int get normalMilkDays => records.where((r) => r.status != 'skipped').length;
+
   double get totalCost => records.fold(0.0, (sum, r) {
     if (r.status != 'skipped') {
-      return sum + (r.milkQuantity + r.extraMilk) * widget.customer.pricePerLiter;
+      return sum +
+          (r.effectiveMilkQuantity + r.extraMilk) * widget.customer.pricePerLiter;
     }
     return sum;
   });
@@ -108,7 +116,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String monthName = DateFormat('MMMM yyyy').format(selectedMonth);
+    final monthName = DateFormat('MMMM yyyy').format(selectedMonth);
     final isPaid = billRecord?.isPaid ?? false;
     final dueAmount = billRecord?.dueAmount ?? totalCost;
 
@@ -161,7 +169,9 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                 subtitle: Text(
                   isPaid
                       ? "Paid on ${billRecord?.paymentDate != null
-                      ? DateFormat('dd MMM yyyy').format(DateTime.parse(billRecord!.paymentDate!))
+                      ? DateFormat('dd MMM yyyy').format(
+                    DateTime.parse(billRecord!.paymentDate!),
+                  )
                       : 'N/A'}"
                       : "Unpaid",
                 ),
@@ -216,15 +226,17 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
               child: ListView.builder(
                 itemCount: records.length,
                 itemBuilder: (context, index) {
-                  MilkRecord r = records[index];
-                  String dateStr = DateFormat('dd MMM yyyy').format(DateTime.parse(r.date));
+                  final r = records[index];
+                  final dateStr =
+                  DateFormat('dd MMM yyyy').format(DateTime.parse(r.date));
+
                   return Card(
                     child: ListTile(
                       title: Text(dateStr),
                       subtitle: Text(
                         r.status == 'skipped'
                             ? 'Skipped'
-                            : 'Normal: ${r.milkQuantity.toStringAsFixed(2)} L, Extra: ${r.extraMilk.toStringAsFixed(2)} L',
+                            : '${_recordLabel(r)}, Extra: ${r.extraMilk.toStringAsFixed(2)} L',
                       ),
                     ),
                   );
@@ -298,13 +310,17 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
           ),
           pw.SizedBox(height: 10),
           pw.TableHelper.fromTextArray(
-            headers: ["Date", "Normal Milk (L)", "Extra Milk (L)", "Status"],
+            headers: ["Date", "Actual Milk (L)", "Extra Milk (L)", "Status"],
             data: records.map((r) {
               return [
                 DateFormat('dd MMM yyyy').format(DateTime.parse(r.date)),
-                r.milkQuantity.toStringAsFixed(2),
+                r.effectiveMilkQuantity.toStringAsFixed(2),
                 r.extraMilk.toStringAsFixed(2),
-                r.status,
+                r.status == 'skipped'
+                    ? 'Skipped'
+                    : (r.effectiveMilkQuantity < r.milkQuantity
+                    ? 'Less'
+                    : 'Normal'),
               ];
             }).toList(),
           ),
@@ -329,7 +345,8 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
 
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Milk bill for ${widget.customer.name} - ${DateFormat('MMMM yyyy').format(selectedMonth)}',
+        text:
+        'Milk bill for ${widget.customer.name} - ${DateFormat('MMMM yyyy').format(selectedMonth)}',
       );
     } catch (e) {
       if (!mounted) return;

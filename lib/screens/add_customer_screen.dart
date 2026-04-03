@@ -127,6 +127,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                     milkQuantity: milk,
                     pricePerLiter: price,
                     time: time,
+                    createdAt: widget.customer?.createdAt ?? DateTime.now().toIso8601String(),
                   );
 
                   if (isEditMode) {
