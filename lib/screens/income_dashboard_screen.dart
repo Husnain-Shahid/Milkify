@@ -78,6 +78,7 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
           customerId: customer.id!,
           billMonth: monthKey,
           totalAmount: totalAmount,
+          collectedAmount: existingBill?.collectedAmount ?? 0.0,
           dueAmount: dueAmount,
           isPaid: isPaid,
           paymentDate: existingBill?.paymentDate,
@@ -118,7 +119,7 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
   double get totalGenerated => bills.fold(0.0, (sum, b) => sum + b.totalAmount);
 
   double get totalCollected =>
-      bills.fold(0.0, (sum, b) => sum + (b.totalAmount - b.dueAmount));
+      bills.fold(0.0, (sum, b) => sum + b.collectedAmount);
 
   double get totalDue => bills.fold(0.0, (sum, b) => sum + b.dueAmount);
 
@@ -159,12 +160,61 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text("Add Payment"),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            hintText: "Enter amount received",
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Customer: ${_customerName(bill.customerId)}",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Total Bill:", style: TextStyle(color: Colors.grey[700])),
+                      Text("Rs ${bill.totalAmount.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Already Collected:", style: TextStyle(color: Colors.grey[700])),
+                      Text("Rs ${bill.collectedAmount.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
+                  ),
+                  SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Pending:", style: TextStyle(color: Colors.grey[700])),
+                      Text("Rs ${bill.dueAmount.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                hintText: "Enter amount received",
+                labelText: "Amount to Collect",
+                border: OutlineInputBorder(),
+                prefixText: "Rs ",
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -173,16 +223,49 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: Text("Save"),
+            child: Text("Save Payment"),
           ),
         ],
       ),
     );
 
     final amount = double.tryParse(amountText ?? '');
-    if (amount == null || amount <= 0) return;
+    if (amount == null || amount <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Invalid amount"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (amount > bill.dueAmount) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Amount exceeds pending amount (Rs ${bill.dueAmount.toStringAsFixed(2)})"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
     await dbHelper.addBillPayment(bill.id!, amount);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("✓ Payment of Rs ${amount.toStringAsFixed(2)} collected from ${_customerName(bill.customerId)}"),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
     _loadDashboard();
   }
 
@@ -191,11 +274,29 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
       bill.id!,
       paymentDate: DateTime.now().toIso8601String(),
     );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("✓ Marked as Fully Paid!"),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
     _loadDashboard();
   }
 
   Future<void> _markUnpaid(BillRecord bill) async {
     await dbHelper.markBillUnpaid(bill.id!);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Marked as Unpaid"),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
     _loadDashboard();
   }
 
@@ -254,12 +355,15 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
 
   Widget _billCard(BillRecord bill) {
     final customerName = _customerName(bill.customerId);
-    final collected = bill.totalAmount - bill.dueAmount;
+    final collected = bill.collectedAmount;
+    final isFullyPaid = bill.dueAmount <= 0;
+    final isPartiallyPaid = collected > 0 && !isFullyPaid;
 
     return Card(
       elevation: 3,
       margin: EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: isFullyPaid ? Colors.green[50] : (isPartiallyPaid ? Colors.blue[50] : Colors.white),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -277,47 +381,118 @@ class _IncomeDashboardScreenState extends State<IncomeDashboardScreen> {
                   ),
                 ),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: bill.isPaid ? Colors.green[100] : Colors.orange[100],
+                    color: isFullyPaid
+                        ? Colors.green[100]
+                        : (isPartiallyPaid ? Colors.blue[100] : Colors.orange[100]),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    bill.isPaid ? "PAID" : "UNPAID",
+                    isFullyPaid
+                        ? "PAID"
+                        : (isPartiallyPaid ? "PARTIAL" : "UNPAID"),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: bill.isPaid ? Colors.green[800] : Colors.orange[800],
+                      fontSize: 12,
+                      color: isFullyPaid
+                          ? Colors.green[800]
+                          : (isPartiallyPaid ? Colors.blue[800] : Colors.orange[800]),
                     ),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 8),
-            Text("Month: ${bill.billMonth}"),
-            Text("Total Bill: Rs ${bill.totalAmount.toStringAsFixed(2)}"),
-            Text("Collected: Rs ${collected.toStringAsFixed(2)}"),
-            Text("Due: Rs ${bill.dueAmount.toStringAsFixed(2)}"),
+            Divider(height: 12),
+            Wrap(
+              spacing: 20,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Total Bill",
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                    Text(
+                      "Rs ${bill.totalAmount.toStringAsFixed(2)}",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Collected",
+                      style: TextStyle(fontSize: 12, color: Colors.green[600]),
+                    ),
+                    Text(
+                      "Rs ${collected.toStringAsFixed(2)}",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green[700],
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Pending",
+                      style: TextStyle(fontSize: 12, color: Colors.orange[600]),
+                    ),
+                    Text(
+                      "Rs ${bill.dueAmount.toStringAsFixed(2)}",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
             if (bill.paymentDate != null)
-              Text(
-                "Last Payment: ${DateFormat('dd MMM yyyy').format(DateTime.parse(bill.paymentDate!))}",
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  "Last Payment: ${DateFormat('dd MMM yyyy').format(DateTime.parse(bill.paymentDate!))}",
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
               ),
             SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
               children: [
-                ElevatedButton(
-                  onPressed: () => _addPayment(bill),
-                  child: Text("Add Payment"),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _addPayment(bill),
+                    icon: Icon(Icons.add),
+                    label: Text("Add Payment"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                 ),
-                OutlinedButton(
-                  onPressed: bill.isPaid ? null : () => _markPaid(bill),
-                  child: Text("Mark Paid"),
-                ),
-                TextButton(
-                  onPressed: bill.isPaid ? () => _markUnpaid(bill) : null,
-                  child: Text("Mark Unpaid"),
-                ),
+                SizedBox(width: 8),
+                if (!isFullyPaid)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _markPaid(bill),
+                      child: Text("Mark Paid"),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _markUnpaid(bill),
+                      child: Text("Mark Unpaid"),
+                    ),
+                  ),
               ],
             ),
           ],

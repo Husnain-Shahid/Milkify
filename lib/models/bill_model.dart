@@ -3,6 +3,7 @@ class BillRecord {
   int customerId;
   String billMonth; // format: yyyy-MM
   double totalAmount;
+  double collectedAmount; // Amount actually collected from customer
   double dueAmount;
   bool isPaid;
   String? paymentDate;
@@ -13,6 +14,7 @@ class BillRecord {
     required this.customerId,
     required this.billMonth,
     required this.totalAmount,
+    this.collectedAmount = 0.0,
     required this.dueAmount,
     required this.isPaid,
     this.paymentDate,
@@ -25,6 +27,7 @@ class BillRecord {
       'customerId': customerId,
       'billMonth': billMonth,
       'totalAmount': totalAmount,
+      'collectedAmount': collectedAmount,
       'dueAmount': dueAmount,
       'isPaid': isPaid ? 1 : 0,
       'paymentDate': paymentDate,
@@ -38,6 +41,7 @@ class BillRecord {
       customerId: map['customerId'],
       billMonth: map['billMonth'],
       totalAmount: (map['totalAmount'] as num).toDouble(),
+      collectedAmount: ((map['collectedAmount'] ?? 0) as num).toDouble(),
       dueAmount: (map['dueAmount'] as num).toDouble(),
       isPaid: map['isPaid'] == 1,
       paymentDate: map['paymentDate'],

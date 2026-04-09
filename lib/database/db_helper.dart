@@ -19,7 +19,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE customers(
@@ -52,6 +52,7 @@ class DBHelper {
             customerId INTEGER,
             billMonth TEXT,
             totalAmount REAL,
+            collectedAmount REAL DEFAULT 0.0,
             dueAmount REAL,
             isPaid INTEGER,
             paymentDate TEXT,
@@ -68,6 +69,7 @@ class DBHelper {
               customerId INTEGER,
               billMonth TEXT,
               totalAmount REAL,
+              collectedAmount REAL DEFAULT 0.0,
               dueAmount REAL,
               isPaid INTEGER,
               paymentDate TEXT,
@@ -101,6 +103,16 @@ class DBHelper {
             UPDATE customers
             SET createdAt = COALESCE(createdAt, strftime('%Y-%m-%dT%H:%M:%f', 'now'))
           ''');
+        }
+
+        if (oldVersion < 6) {
+          try {
+            await db.execute(
+              'ALTER TABLE bills ADD COLUMN collectedAmount REAL DEFAULT 0.0',
+            );
+          } catch (_) {
+            // Column may already exist.
+          }
         }
       },
     );
@@ -297,11 +309,16 @@ class DBHelper {
 
   Future<int> markBillPaid(int billId, {String? paymentDate}) async {
     final db = await database;
+    final bill = await getBillById(billId);
+
+    if (bill == null) return 0;
+
     return await db.update(
       'bills',
       {
-        'isPaid': 1,
+        'collectedAmount': bill.totalAmount,
         'dueAmount': 0.0,
+        'isPaid': 1,
         'paymentDate': paymentDate ?? DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
@@ -318,8 +335,9 @@ class DBHelper {
     return await db.update(
       'bills',
       {
-        'isPaid': 0,
+        'collectedAmount': 0.0,
         'dueAmount': bill.totalAmount,
+        'isPaid': 0,
         'paymentDate': null,
       },
       where: 'id = ?',
@@ -355,12 +373,14 @@ class DBHelper {
 
     if (bill == null) return 0;
 
+    double newCollected = bill.collectedAmount + amount;
     double newDue = bill.dueAmount - amount;
     if (newDue < 0) newDue = 0;
 
     return await db.update(
       'bills',
       {
+        'collectedAmount': newCollected,
         'dueAmount': newDue,
         'isPaid': newDue == 0 ? 1 : 0,
         'paymentDate': DateTime.now().toIso8601String(),
