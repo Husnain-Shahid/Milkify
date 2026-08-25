@@ -21,6 +21,30 @@ class BillRecord {
     required this.createdAt,
   });
 
+  BillRecord copyWith({
+    int? id,
+    int? customerId,
+    String? billMonth,
+    double? totalAmount,
+    double? collectedAmount,
+    double? dueAmount,
+    bool? isPaid,
+    String? paymentDate,
+    String? createdAt,
+  }) {
+    return BillRecord(
+      id: id ?? this.id,
+      customerId: customerId ?? this.customerId,
+      billMonth: billMonth ?? this.billMonth,
+      totalAmount: totalAmount ?? this.totalAmount,
+      collectedAmount: collectedAmount ?? this.collectedAmount,
+      dueAmount: dueAmount ?? this.dueAmount,
+      isPaid: isPaid ?? this.isPaid,
+      paymentDate: paymentDate ?? this.paymentDate,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -45,7 +69,7 @@ class BillRecord {
       dueAmount: (map['dueAmount'] as num).toDouble(),
       isPaid: map['isPaid'] == 1,
       paymentDate: map['paymentDate'],
-      createdAt: map['createdAt'],
+      createdAt: map['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
     );
   }
 }

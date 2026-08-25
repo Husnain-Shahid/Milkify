@@ -19,7 +19,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE customers(
@@ -57,6 +57,20 @@ class DBHelper {
             isPaid INTEGER,
             paymentDate TEXT,
             createdAt TEXT,
+            UNIQUE(customerId, billMonth)
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE pdf_dispatch_logs(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customerId INTEGER NOT NULL,
+            billMonth TEXT NOT NULL,
+            phoneNumber TEXT NOT NULL,
+            status TEXT NOT NULL,
+            filePath TEXT,
+            dispatchedAt TEXT NOT NULL,
+            errorMessage TEXT,
             UNIQUE(customerId, billMonth)
           )
         ''');
@@ -114,8 +128,25 @@ class DBHelper {
             // Column may already exist.
           }
         }
+
+        if (oldVersion < 7) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS pdf_dispatch_logs(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              customerId INTEGER NOT NULL,
+              billMonth TEXT NOT NULL,
+              phoneNumber TEXT NOT NULL,
+              status TEXT NOT NULL,
+              filePath TEXT,
+              dispatchedAt TEXT NOT NULL,
+              errorMessage TEXT,
+              UNIQUE(customerId, billMonth)
+            )
+          ''');
+        }
       },
     );
+
   }
 
   /// Insert a new customer
@@ -142,9 +173,11 @@ class DBHelper {
     return List.generate(maps.length, (i) => Customer.fromMap(maps[i]));
   }
 
-  /// Delete a customer
+  /// Delete a customer and cascade delete their milk records and bills
   Future<int> deleteCustomer(int id) async {
     final db = await database;
+    await db.delete('milk_records', where: 'customerId = ?', whereArgs: [id]);
+    await db.delete('bills', where: 'customerId = ?', whereArgs: [id]);
     return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -193,9 +226,13 @@ class DBHelper {
     return null;
   }
 
+  static String formatDate(DateTime dt) {
+    return '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
   /// Ensure today's normal milk is present
   Future<void> ensureTodayMilk(int customerId, double milkQuantity) async {
-    final String today = DateTime.now().toIso8601String().split('T')[0];
+    final String today = formatDate(DateTime.now());
     final MilkRecord? todayRecord = await getRecordByDate(customerId, today);
     if (todayRecord == null) {
       final MilkRecord record = MilkRecord(
@@ -227,18 +264,21 @@ class DBHelper {
       DateTime startDate;
 
       if (records.isNotEmpty) {
-        final latest = DateTime.parse(records.last.date);
-        final latestDateOnly = DateTime(latest.year, latest.month, latest.day);
-        startDate = latestDateOnly.add(const Duration(days: 1));
+        final latest = DateTime.tryParse(records.last.date);
+        if (latest != null) {
+          startDate = DateTime(latest.year, latest.month, latest.day + 1);
+        } else {
+          startDate = todayDate;
+        }
       } else {
         final created = DateTime.tryParse(customer.createdAt) ?? todayDate;
         startDate = DateTime(created.year, created.month, created.day);
       }
 
       for (DateTime day = startDate;
-      !day.isAfter(todayDate);
-      day = day.add(const Duration(days: 1))) {
-        final key = day.toIso8601String().split('T')[0];
+          !day.isAfter(todayDate);
+          day = DateTime(day.year, day.month, day.day + 1)) {
+        final key = formatDate(day);
 
         if (existingDates.contains(key)) continue;
 
@@ -298,14 +338,16 @@ class DBHelper {
       return id;
     } else {
       bill.id = existing.id;
-      return await db.update(
+      await db.update(
         'bills',
         bill.toMap(),
         where: 'id = ?',
         whereArgs: [existing.id],
       );
+      return existing.id!;
     }
   }
+
 
   Future<int> markBillPaid(int billId, {String? paymentDate}) async {
     final db = await database;
@@ -374,8 +416,8 @@ class DBHelper {
     if (bill == null) return 0;
 
     double newCollected = bill.collectedAmount + amount;
-    double newDue = bill.dueAmount - amount;
-    if (newDue < 0) newDue = 0;
+    if (newCollected > bill.totalAmount) newCollected = bill.totalAmount;
+    double newDue = (bill.totalAmount - newCollected).clamp(0.0, double.infinity);
 
     return await db.update(
       'bills',
@@ -389,4 +431,69 @@ class DBHelper {
       whereArgs: [billId],
     );
   }
+
+  /// Check if the monthly PDF has already been successfully sent to the customer
+  Future<bool> isMonthlyPdfDispatched(int customerId, String billMonth) async {
+    final db = await database;
+    final res = await db.query(
+      'pdf_dispatch_logs',
+      where: 'customerId = ? AND billMonth = ? AND status = ?',
+      whereArgs: [customerId, billMonth, 'sent'],
+      limit: 1,
+    );
+    return res.isNotEmpty;
+  }
+
+  /// Record a PDF dispatch attempt (sent, failed, or skipped)
+  Future<void> recordPdfDispatch({
+    required int customerId,
+    required String billMonth,
+    required String phoneNumber,
+    required String status,
+    String? filePath,
+    String? errorMessage,
+  }) async {
+    final db = await database;
+    final data = {
+      'customerId': customerId,
+      'billMonth': billMonth,
+      'phoneNumber': phoneNumber,
+      'status': status,
+      'filePath': filePath,
+      'dispatchedAt': DateTime.now().toIso8601String(),
+      'errorMessage': errorMessage,
+    };
+
+    await db.insert(
+      'pdf_dispatch_logs',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Retrieve all PDF dispatch logs for a given month
+  Future<List<Map<String, dynamic>>> getPdfDispatchLogsForMonth(String billMonth) async {
+    final db = await database;
+    return await db.query(
+      'pdf_dispatch_logs',
+      where: 'billMonth = ?',
+      whereArgs: [billMonth],
+      orderBy: 'dispatchedAt DESC',
+    );
+  }
+
+  /// Get list of customer IDs that have been successfully sent for a given month
+  Future<List<int>> getDispatchedCustomerIdsForMonth(String billMonth) async {
+    final db = await database;
+    final res = await db.query(
+      'pdf_dispatch_logs',
+      columns: ['customerId'],
+      where: 'billMonth = ? AND status = ?',
+      whereArgs: [billMonth, 'sent'],
+    );
+    return res.map((r) => r['customerId'] as int).toList();
+  }
 }
+
+
+

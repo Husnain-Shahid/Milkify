@@ -22,6 +22,26 @@ class MilkRecord {
     return actualMilkQuantity ?? milkQuantity;
   }
 
+  MilkRecord copyWith({
+    int? id,
+    int? customerId,
+    String? date,
+    double? milkQuantity,
+    double? actualMilkQuantity,
+    double? extraMilk,
+    String? status,
+  }) {
+    return MilkRecord(
+      id: id ?? this.id,
+      customerId: customerId ?? this.customerId,
+      date: date ?? this.date,
+      milkQuantity: milkQuantity ?? this.milkQuantity,
+      actualMilkQuantity: actualMilkQuantity ?? this.actualMilkQuantity,
+      extraMilk: extraMilk ?? this.extraMilk,
+      status: status ?? this.status,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -39,12 +59,12 @@ class MilkRecord {
       id: map['id'],
       customerId: map['customerId'],
       date: map['date'],
-      milkQuantity: (map['milkQuantity'] as num).toDouble(),
+      milkQuantity: ((map['milkQuantity'] ?? 0) as num).toDouble(),
       actualMilkQuantity: map['actualMilkQuantity'] == null
           ? null
           : (map['actualMilkQuantity'] as num).toDouble(),
-      extraMilk: (map['extraMilk'] as num).toDouble(),
-      status: map['status'],
+      extraMilk: ((map['extraMilk'] ?? 0) as num).toDouble(),
+      status: map['status'] ?? 'taken',
     );
   }
 }
