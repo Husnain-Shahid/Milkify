@@ -9,6 +9,7 @@ import '../models/bill_model.dart';
 import '../models/customer_model.dart';
 import '../models/milk_record_model.dart';
 import '../services/pdf_invoice_service.dart';
+import 'quantity_breakdown_screen.dart';
 
 
 
@@ -527,43 +528,91 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isPaid
-                                      ? Colors.green.shade100
-                                      : (isPartiallyPaid ? Colors.blue.shade100 : Colors.orange.shade100),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      isPaid ? Icons.check_circle : (isPartiallyPaid ? Icons.timelapse : Icons.pending),
-                                      size: 14,
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
                                       color: isPaid
-                                          ? Colors.green.shade900
-                                          : (isPartiallyPaid ? Colors.blue.shade900 : Colors.orange.shade900),
+                                          ? Colors.green.shade100
+                                          : (isPartiallyPaid ? Colors.blue.shade100 : Colors.orange.shade100),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                    const SizedBox(width: 4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isPaid ? Icons.check_circle : (isPartiallyPaid ? Icons.timelapse : Icons.pending),
+                                          size: 14,
+                                          color: isPaid
+                                              ? Colors.green.shade900
+                                              : (isPartiallyPaid ? Colors.blue.shade900 : Colors.orange.shade900),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          isPaid ? "STATUS: PAID" : (isPartiallyPaid ? "STATUS: PARTIAL" : "STATUS: UNPAID"),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: isPaid
+                                                ? Colors.green.shade900
+                                                : (isPartiallyPaid ? Colors.blue.shade900 : Colors.orange.shade900),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (billRecord?.paymentDate != null) ...[
+                                    const SizedBox(width: 6),
                                     Text(
-                                      isPaid ? "STATUS: PAID" : (isPartiallyPaid ? "STATUS: PARTIAL" : "STATUS: UNPAID"),
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        color: isPaid
-                                            ? Colors.green.shade900
-                                            : (isPartiallyPaid ? Colors.blue.shade900 : Colors.orange.shade900),
-                                      ),
+                                      "(${DateFormat('dd MMM').format(DateTime.parse(billRecord!.paymentDate!))})",
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                                     ),
                                   ],
-                                ),
+                                ],
                               ),
-                              if (billRecord?.paymentDate != null)
-                                Text(
-                                  "Paid on: ${DateFormat('dd MMM yyyy').format(DateTime.parse(billRecord!.paymentDate!))}",
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                              // Navigate to the Quantity Breakdown Screen (shows consumption grouped by daily Liters, Days count, and Price)
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.table_chart_outlined, size: 14),
+                                label: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      "Qty Breakdown",
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                    SizedBox(width: 3),
+                                    Icon(Icons.arrow_forward_ios, size: 10),
+                                  ],
                                 ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.indigo.shade800,
+                                  elevation: 1,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: BorderSide(color: Colors.indigo.shade200, width: 1.2),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => QuantityBreakdownScreen(
+                                        customer: widget.customer,
+                                        selectedMonth: selectedMonth,
+                                        monthTag: monthTag,
+                                        records: records,
+                                        billRecord: billRecord,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ],
                           ),
                         ],
@@ -612,26 +661,26 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                   const SizedBox(height: 10),
 
                   // Share Bill on WhatsApp / PDF Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.share, size: 18),
-                      label: const Text(
-                        "Share Bill on WhatsApp / PDF",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF25D366), // WhatsApp Green
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        elevation: 1,
-                      ),
-                      onPressed: _sharePdfToWhatsApp,
-                    ),
-                  ),
+                  // SizedBox(
+                  //   width: double.infinity,
+                  //   child: ElevatedButton.icon(
+                  //     icon: const Icon(Icons.share, size: 18),
+                  //     label: const Text(
+                  //       "Share Bill on WhatsApp / PDF",
+                  //       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  //     ),
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: const Color(0xFF25D366), // WhatsApp Green
+                  //       foregroundColor: Colors.white,
+                  //       padding: const EdgeInsets.symmetric(vertical: 12),
+                  //       shape: RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.circular(10),
+                  //       ),
+                  //       elevation: 1,
+                  //     ),
+                  //     onPressed: _sharePdfToWhatsApp,
+                  //   ),
+                  // ),
                   const SizedBox(height: 10),
                   const Align(
                     alignment: Alignment.centerLeft,
